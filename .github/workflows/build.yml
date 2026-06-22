@@ -1,0 +1,397 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# NOTE: the *-arm64 jobs use GitHub's Linux arm64 hosted runners (`ubuntu-24.04-arm`).
+# Those are FREE for PUBLIC repos (GA 2025); on a PRIVATE repo they need a paid larger-runner
+# plan. If unavailable, remove the two `*-arm64` jobs (and their entries in `release.needs`)
+# and the x86_64 release still builds. PyInstaller cannot cross-compile, so an ARM binary needs
+# a real ARM runner — hence native arm64 jobs rather than emulation.
+
+jobs:
+  # ── Agent templates (built FIRST — embedded into the main executables) ──────────
+  # Built per (OS, arch) and embedded into ALL main builds, so any release can generate
+  # Windows + Linux agents (cross-OS, #5a) AND both Linux architectures (cross-arch): the
+  # Linux templates are named -linux-amd64 / -linux-arm64; generate._find_agent_template
+  # picks the one matching the target device. Windows ships ONE x64 template (Windows 11 on
+  # ARM emulates x64), so there's no windows-arm template.
+  build-agent-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Build Windows agent template
+        working-directory: build
+        run: pyinstaller agent_windows.spec --distpath ../dist --workpath ../build_tmp --noconfirm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-template-windows
+          path: dist/syncthing-manager-agent-template.exe
+
+  build-agent-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Build Linux agent template (amd64)
+        working-directory: build
+        run: pyinstaller agent_linux.spec --distpath ../dist --workpath ../build_tmp --noconfirm
+      - name: Name per arch + make executable
+        run: |
+          mv dist/syncthing-manager-agent-template dist/syncthing-manager-agent-template-linux-amd64
+          chmod +x dist/syncthing-manager-agent-template-linux-amd64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-template-linux-amd64
+          path: dist/syncthing-manager-agent-template-linux-amd64
+
+  build-agent-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Build Linux agent template (arm64)
+        working-directory: build
+        run: pyinstaller agent_linux.spec --distpath ../dist --workpath ../build_tmp --noconfirm
+      - name: Name per arch + make executable
+        run: |
+          mv dist/syncthing-manager-agent-template dist/syncthing-manager-agent-template-linux-arm64
+          chmod +x dist/syncthing-manager-agent-template-linux-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-template-linux-arm64
+          path: dist/syncthing-manager-agent-template-linux-arm64
+
+  # macOS agent templates (Mach-O — a Linux/Windows agent will NOT run on macOS, so it needs its
+  # own native binary, built per arch on a macOS runner). Apple Silicon = macos-14 (arm64). Intel
+  # = macos-15-intel (the new standard x86_64 runner; the old macos-13 is being retired and queued
+  # forever). setup-python ships a Python WITH tkinter on macOS (no apt step needed).
+  build-agent-macos-amd64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Build macOS agent template (amd64)
+        working-directory: build
+        run: pyinstaller agent_macos.spec --distpath ../dist --workpath ../build_tmp --noconfirm
+      - name: Name per arch + make executable
+        run: |
+          mv dist/syncthing-manager-agent-template dist/syncthing-manager-agent-template-macos-amd64
+          chmod +x dist/syncthing-manager-agent-template-macos-amd64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-template-macos-amd64
+          path: dist/syncthing-manager-agent-template-macos-amd64
+
+  build-agent-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Build macOS agent template (arm64)
+        working-directory: build
+        run: pyinstaller agent_macos.spec --distpath ../dist --workpath ../build_tmp --noconfirm
+      - name: Name per arch + make executable
+        run: |
+          mv dist/syncthing-manager-agent-template dist/syncthing-manager-agent-template-macos-arm64
+          chmod +x dist/syncthing-manager-agent-template-macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-template-macos-arm64
+          path: dist/syncthing-manager-agent-template-macos-arm64
+
+  # ── Windows GUI (onedir folder) ───────────────────────────────────────────────
+  build-windows:
+    needs: [build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install pyinstaller && pip install -e .
+      # Download ALL agent templates into dist/ so windows.spec embeds them (cross-OS + cross-arch).
+      - name: Download agent templates
+        uses: actions/download-artifact@v8
+        with:
+          pattern: agent-template-*
+          path: dist/
+          merge-multiple: true
+      # No-arch Linux generation defaults to the plain name → point it at amd64 (most common).
+      - name: Plain-name Linux template (backward compat)
+        run: Copy-Item dist/syncthing-manager-agent-template-linux-amd64 dist/syncthing-manager-agent-template
+      - name: Build Windows exe
+        # Run from the REPO ROOT (not build/) so the spec's relative dist/ candidate paths
+        # resolve to the real <repo>/dist where the downloaded agent templates live — else the
+        # spec embeds NOTHING and the released app can't generate agents. Matches build_linux.sh.
+        run: pyinstaller build/windows.spec --distpath dist --workpath build_tmp --noconfirm
+      - name: Package (zip)
+        run: |
+          Copy-Item LICENSE,THIRD_PARTY_LICENSES.md dist/syncthing-manager/
+          Compress-Archive -Path dist/syncthing-manager -DestinationPath dist/syncthing-manager-windows.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: syncthing-manager-windows
+          path: dist/syncthing-manager-windows.zip
+
+  # ── Linux binary, amd64 (GUI + CLI fallback, onedir folder) ───────────────────
+  build-linux-amd64:
+    needs: [build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Download agent templates
+        uses: actions/download-artifact@v8
+        with:
+          pattern: agent-template-*
+          path: dist/
+          merge-multiple: true
+      # No-arch Linux generation defaults to the plain name → this build's own arch (amd64).
+      - name: Plain-name Linux template (backward compat)
+        run: cp dist/syncthing-manager-agent-template-linux-amd64 dist/syncthing-manager-agent-template
+      - name: Build Linux binary
+        # Run from the REPO ROOT (see Windows note): the spec's relative dist/ paths must resolve
+        # to <repo>/dist where the agent templates are, or nothing gets embedded.
+        run: pyinstaller build/linux.spec --distpath dist --workpath build_tmp --noconfirm
+      - name: Package (tar.gz)
+        run: |
+          chmod +x dist/syncthing-manager/syncthing-manager
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/syncthing-manager/
+          tar -czf dist/syncthing-manager-linux-amd64.tar.gz -C dist syncthing-manager
+      - uses: actions/upload-artifact@v7
+        with:
+          name: syncthing-manager-linux-amd64
+          path: dist/syncthing-manager-linux-amd64.tar.gz
+
+  # ── Linux binary, arm64 (Raspberry Pi 64-bit, etc.) ───────────────────────────
+  build-linux-arm64:
+    needs: [build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Download agent templates
+        uses: actions/download-artifact@v8
+        with:
+          pattern: agent-template-*
+          path: dist/
+          merge-multiple: true
+      # No-arch Linux generation defaults to the plain name → this build's own arch (arm64).
+      - name: Plain-name Linux template (backward compat)
+        run: cp dist/syncthing-manager-agent-template-linux-arm64 dist/syncthing-manager-agent-template
+      - name: Build Linux binary
+        # Run from the REPO ROOT (see Windows note): the spec's relative dist/ paths must resolve
+        # to <repo>/dist where the agent templates are, or nothing gets embedded.
+        run: pyinstaller build/linux.spec --distpath dist --workpath build_tmp --noconfirm
+      - name: Package (tar.gz)
+        run: |
+          chmod +x dist/syncthing-manager/syncthing-manager
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/syncthing-manager/
+          tar -czf dist/syncthing-manager-linux-arm64.tar.gz -C dist syncthing-manager
+      - uses: actions/upload-artifact@v7
+        with:
+          name: syncthing-manager-linux-arm64
+          path: dist/syncthing-manager-linux-arm64.tar.gz
+
+  # ── macOS app, Intel x86_64 (onedir folder) ──────────────────────────────────
+  build-macos-amd64:
+    needs: [build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Download agent templates
+        uses: actions/download-artifact@v8
+        with:
+          pattern: agent-template-*
+          path: dist/
+          merge-multiple: true
+      # No-arch macOS generation defaults to the plain name → this build's own arch (amd64).
+      - name: Plain-name macOS template (backward compat)
+        run: cp dist/syncthing-manager-agent-template-macos-amd64 dist/syncthing-manager-agent-template
+      - name: Build macOS app
+        # Run from the REPO ROOT (see Windows/Linux note): the spec's relative dist/ paths must
+        # resolve to <repo>/dist where the agent templates are, or nothing gets embedded.
+        run: pyinstaller build/macos.spec --distpath dist --workpath build_tmp --noconfirm
+      - name: Package (tar.gz)
+        run: |
+          chmod +x dist/syncthing-manager/syncthing-manager
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/syncthing-manager/
+          tar -czf dist/syncthing-manager-macos-amd64.tar.gz -C dist syncthing-manager
+      - uses: actions/upload-artifact@v7
+        with:
+          name: syncthing-manager-macos-amd64
+          path: dist/syncthing-manager-macos-amd64.tar.gz
+
+  # ── macOS app, Apple Silicon arm64 (onedir folder) ───────────────────────────
+  build-macos-arm64:
+    needs: [build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install pyinstaller && pip install -e .
+      - name: Download agent templates
+        uses: actions/download-artifact@v8
+        with:
+          pattern: agent-template-*
+          path: dist/
+          merge-multiple: true
+      # No-arch macOS generation defaults to the plain name → this build's own arch (arm64).
+      - name: Plain-name macOS template (backward compat)
+        run: cp dist/syncthing-manager-agent-template-macos-arm64 dist/syncthing-manager-agent-template
+      - name: Build macOS app
+        run: pyinstaller build/macos.spec --distpath dist --workpath build_tmp --noconfirm
+      - name: Package (tar.gz)
+        run: |
+          chmod +x dist/syncthing-manager/syncthing-manager
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/syncthing-manager/
+          tar -czf dist/syncthing-manager-macos-arm64.tar.gz -C dist syncthing-manager
+      - uses: actions/upload-artifact@v7
+        with:
+          name: syncthing-manager-macos-arm64
+          path: dist/syncthing-manager-macos-arm64.tar.gz
+
+  # ── GitHub Release ────────────────────────────────────────────────────────────
+    # Ships the 5 app archives PLUS the standalone agent templates. The apps already embed
+    # every template, so a normal user never needs the standalone ones — they're for someone
+    # who self-compiles on an UNSUPPORTED arch (e.g. 32-bit Pi): their local build only embeds
+    # its own arch's agent, so they download these and drop them in dist/ before building to
+    # generate agents for the rest of the cluster.
+  release:
+    needs: [build-windows, build-linux-amd64, build-linux-arm64,
+            build-macos-amd64, build-macos-arm64,
+            build-agent-windows, build-agent-linux-amd64, build-agent-linux-arm64,
+            build-agent-macos-amd64, build-agent-macos-arm64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5   # for LICENSE + THIRD_PARTY_LICENSES.md as release assets
+      - uses: actions/download-artifact@v8
+        with: { name: syncthing-manager-windows,      path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: syncthing-manager-linux-amd64,  path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: syncthing-manager-linux-arm64,  path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: syncthing-manager-macos-amd64,  path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: syncthing-manager-macos-arm64,  path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: agent-template-windows,         path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: agent-template-linux-amd64,     path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: agent-template-linux-arm64,     path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: agent-template-macos-amd64,     path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: agent-template-macos-arm64,     path: dist/ }
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          sha256sum \
+            syncthing-manager-windows.zip \
+            syncthing-manager-linux-amd64.tar.gz \
+            syncthing-manager-linux-arm64.tar.gz \
+            syncthing-manager-macos-amd64.tar.gz \
+            syncthing-manager-macos-arm64.tar.gz \
+            syncthing-manager-agent-template.exe \
+            syncthing-manager-agent-template-linux-amd64 \
+            syncthing-manager-agent-template-linux-arm64 \
+            syncthing-manager-agent-template-macos-amd64 \
+            syncthing-manager-agent-template-macos-arm64 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Official path: the GitHub CLI (preinstalled on the runner) — no third-party action, so
+      # no extra Node-version churn or SHA-pinning to maintain. `gh release create` fails if any
+      # listed asset path is missing (same guard as fail_on_unmatched_files) and defaults to a
+      # published, non-draft, non-prerelease release. Notes live in .github/release-notes.md.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file .github/release-notes.md \
+            dist/syncthing-manager-windows.zip \
+            dist/syncthing-manager-linux-amd64.tar.gz \
+            dist/syncthing-manager-linux-arm64.tar.gz \
+            dist/syncthing-manager-macos-amd64.tar.gz \
+            dist/syncthing-manager-macos-arm64.tar.gz \
+            dist/syncthing-manager-agent-template.exe \
+            dist/syncthing-manager-agent-template-linux-amd64 \
+            dist/syncthing-manager-agent-template-linux-arm64 \
+            dist/syncthing-manager-agent-template-macos-amd64 \
+            dist/syncthing-manager-agent-template-macos-arm64 \
+            dist/SHA256SUMS.txt \
+            LICENSE \
+            THIRD_PARTY_LICENSES.md

@@ -1,0 +1,16 @@
+defaults:
+  ssh_user: ubuntu
+  ssh_key_path: ~/.ssh/id_rsa
+
+devices:
+  - device_id: "XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX"
+    name: nas
+    ssh_host: 192.168.1.20
+    ssh_user: admin
+    syncthing_config_path: /volume1/@appstore/syncthing/var/config.xml
+
+  - device_id: "YYYYYYY-YYYYYYY-YYYYYYY-YYYYYYY-YYYYYYY-YYYYYYY-YYYYYYY-YYYYYYY"
+    name: homeserver
+    ssh_host: 192.168.1.10
+    # ssh_user inherited from defaults
+    # syncthing_config_path auto-detected if not specified

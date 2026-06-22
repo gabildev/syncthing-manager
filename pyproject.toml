@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "syncthing-manager"
+version = "1.0.0"
+description = "Rename a Syncthing shared folder across all devices automatically"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "syncthing-manager contributors" }
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: System :: Archiving :: Mirroring",
+]
+dependencies = [
+    "requests>=2.28",
+    "paramiko>=3.0",
+    "rich>=13.0",
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "cryptography>=41.0",
+    "pywinrm>=0.4.3",
+    "requests-ntlm>=1.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/gabildev/syncthing-manager"
+Repository = "https://github.com/gabildev/syncthing-manager"
+Issues = "https://github.com/gabildev/syncthing-manager/issues"
+
+[project.scripts]
+syncthing-manager = "syncthing_manager.cli:app"
+syncthing-manager-gui = "syncthing_manager.gui:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "pyinstaller>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["syncthing_manager"]

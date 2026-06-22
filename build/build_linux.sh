@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Builds dist/linux/syncthing-manager/ (onedir folder) + the Linux agent template.
+# Run from the project root.
+#
+# Usage:  build/build_linux.sh [--no-package]
+#   --no-package (aliases --no-pack / --skip-package): do NOT build the .tar.gz, leave only the
+#   onedir folder dist/linux/syncthing-manager/ -- handy for fast iteration while testing.
+set -euo pipefail
+
+NO_PACKAGE=0
+for _arg in "$@"; do
+    case "$_arg" in
+        --no-package|--no-pack|--skip-package) NO_PACKAGE=1 ;;
+        *) echo "Unknown argument: $_arg (usage: $0 [--no-package])" >&2; exit 2 ;;
+    esac
+done
+
+PYTHON="${PYTHON:-python3}"
+echo "Using: $PYTHON"
+"$PYTHON" --version
+
+# Make the in-tree package importable for PyInstaller even when it isn't pip-installed.
+export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+
+echo
+echo "Preparing build dependencies..."
+if "$PYTHON" -c "import PyInstaller, paramiko, cryptography, typer, syncthing_manager" 2>/dev/null; then
+    # Dev box / venv where everything is already installed → no pip needed (also sidesteps the
+    # "externally-managed-environment" refusal on modern Debian/Ubuntu, PEP 668).
+    echo "  Dependencies already present -- skipping installation."
+elif "$PYTHON" -m pip install pyinstaller -e . -q 2>/dev/null; then
+    echo "  Dependencies installed with pip."
+else
+    # System Python refuses a direct install (PEP 668 externally-managed) → use a local build venv.
+    echo "  Direct pip unavailable (PEP 668?) -- using the build venv build_venv/ ..."
+    "$PYTHON" -m venv build_venv
+    PYTHON="$PWD/build_venv/bin/python"
+    "$PYTHON" -m pip install -q --upgrade pip
+    "$PYTHON" -m pip install pyinstaller -e . -q
+fi
+
+# (Re)generate the app icon from source (best-effort). The specs fall back to no icon if this
+# fails, so a missing Pillow never breaks the build.
+"$PYTHON" assets/make_icon.py 2>/dev/null \
+    || { "$PYTHON" -m pip install pillow -q 2>/dev/null && "$PYTHON" assets/make_icon.py; } \
+    || echo "  (note: could not generate the icon -- building without one)"
+
+echo
+echo "Building Linux agent (for devices without remote access)..."
+"$PYTHON" -m PyInstaller build/agent_linux.spec --distpath dist/linux --workpath build_tmp --noconfirm
+
+# Stash the freshly built Linux template in the PERSISTENT, synced build/prebuilt/ so it
+# (a) survives the post-build cleanup below and (b) is available — via Syncthing — on the other
+# build machines to embed into their executables (cross-OS/arch agent generation, #5a). We keep
+# the un-suffixed name (host-arch fallback / backward compat, used for the base build) AND an
+# arch-suffixed copy so an amd64 box and an arm64 box (e.g. a Raspberry Pi) each contribute their
+# own arch — PyInstaller can't cross-compile, so the only way to get -linux-arm64 is to build ON
+# arm64. The arch suffix matches what CI produces (build.yml). Mirrors build_macos.sh.
+ARCH="$(uname -m)"
+case "$ARCH" in
+    arm64|aarch64) ARCH_TAG="arm64" ;;
+    x86_64|amd64)  ARCH_TAG="amd64" ;;
+    *)             ARCH_TAG="$ARCH" ;;
+esac
+mkdir -p build/prebuilt
+cp -f dist/linux/syncthing-manager-agent-template build/prebuilt/ 2>/dev/null || true
+cp -f dist/linux/syncthing-manager-agent-template \
+      "build/prebuilt/syncthing-manager-agent-template-linux-${ARCH_TAG}" 2>/dev/null || true
+# Also expose the arch-suffixed name in dist/linux so linux.spec embeds it for THIS arch.
+cp -f dist/linux/syncthing-manager-agent-template \
+      "dist/linux/syncthing-manager-agent-template-linux-${ARCH_TAG}" 2>/dev/null || true
+
+# The main exe embeds BOTH agent templates (#5a) when they exist BEFORE it is built, so
+# build the templates first. The Windows template (built on Windows) is picked up from
+# build/prebuilt/ (synced) or dist/windows/ if present.
+echo
+echo "Building main executable (Linux, with embedded templates if present)..."
+"$PYTHON" -m PyInstaller build/linux.spec --distpath dist/linux --workpath build_tmp --noconfirm
+
+if [ -f build/prebuilt/syncthing-manager-agent-template.exe ] || [ -f dist/windows/syncthing-manager-agent-template.exe ]; then
+    echo "  + Windows agent template embedded (Windows agents can be generated)"
+else
+    echo "  - Windows agent template NOT found (build it on Windows; build/prebuilt/"
+    echo "    is synced by Syncthing, so rebuilding here will embed it automatically)"
+fi
+
+# The templates are now EMBEDDED in the program folder (extracted on demand when generating an
+# agent), so we delete the loose template binaries from dist/.
+# NOTE: we do NOT delete build/prebuilt/ (it is the persistent store for the cross-embed).
+rm -f dist/linux/syncthing-manager-agent-template dist/linux/syncthing-manager-agent-template.exe \
+      dist/linux/syncthing-manager-agent-template-linux-*
+
+# Cleanup: PyInstaller's intermediate work dir is disposable. Resilient: on the 9p filesystem of
+# /mnt/c a leftover from a Windows build (build_tmp/windows) may fail to delete and `rm` errors
+# with "not empty" -- under set -e that would abort the script BEFORE packaging (leaving a stale
+# tar.gz). The `|| true` avoids that hang; the final cleanup retries anyway.
+rm -rf build_tmp 2>/dev/null || true
+
+# onedir build (#87): the output is the FOLDER dist/linux/syncthing-manager/ (instant startup,
+# nothing to extract). We package it into a .tar.gz rooted at the parent folder
+# syncthing-manager/ (extracting yields that folder with everything inside). The archive name
+# keeps the -linux suffix to tell the OS apart when downloading.
+if [ "$NO_PACKAGE" -eq 0 ]; then
+    echo
+    echo "Packaging dist/linux/syncthing-manager-linux.tar.gz ..."
+    # Ship the licenses alongside the binary (MIT + third-party attributions, incl. paramiko LGPL).
+    cp -f LICENSE THIRD_PARTY_LICENSES.md dist/linux/syncthing-manager/ 2>/dev/null || true
+    rm -f dist/linux/syncthing-manager-linux.tar.gz
+    tar -czf dist/linux/syncthing-manager-linux.tar.gz -C dist/linux syncthing-manager
+else
+    echo
+    echo "Skipping packaging (--no-package): onedir folder only."
+fi
+
+# Final cleanup: remove ALL the temporary stuff PyInstaller leaves (the .spec cache in
+# build/__pycache__) and pip install -e . (*.egg-info), besides the build_tmp removed above.
+# The tree is left clean after building (only dist/ with the binaries and build/ with sources).
+rm -rf build/__pycache__ build/build build/dist build_tmp ./*.egg-info 2>/dev/null || true
+
+echo
+echo "============================================="
+if [ "$NO_PACKAGE" -eq 0 ]; then
+    echo " Done in dist/linux/ (onedir folder + tar.gz):"
+    echo "   syncthing-manager/syncthing-manager        (agent templates embedded)"
+    echo "   syncthing-manager-linux.tar.gz             (for distribution; extracts to syncthing-manager/)"
+else
+    echo " Done in dist/linux/ (onedir folder only, not packaged):"
+    echo "   syncthing-manager/syncthing-manager        (agent templates embedded)"
+fi
+echo "============================================="

@@ -1,0 +1,48 @@
+# ── Build outputs ─────────────────────────────────────────────
+dist/
+build_tmp/
+# Agent binaries that `generate-agent` writes to the cwd by default (test artifacts).
+# The *-template* ones live under dist/ and build/prebuilt/ (already ignored above/below).
+syncthing-manager-agent
+syncthing-manager-agent-*
+syncthing-manager-agent.exe
+# Syncthing-synced agent-template stash for LOCAL cross-OS builds — must NOT be committed,
+# or CI would embed stale templates (the specs now prefer dist/ anyway). If it was committed
+# before, untrack it once:  git rm -r --cached build/prebuilt
+build/prebuilt/
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────
+.venv/
+venv/
+env/
+build_venv/      # build_*.sh fallback venv when the system Python is externally-managed (PEP 668)
+
+# ── Testing ───────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── IDEs ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Config local (credenciales reales, no el ejemplo) ─────────
+devices.yml
+
+# Raw window captures (sources for assets/make_screenshots.py) — the composited outputs in
+# assets/screenshots/ ARE versioned; these raw sources are not.
+assets/captures/
