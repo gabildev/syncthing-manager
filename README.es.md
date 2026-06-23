@@ -268,6 +268,18 @@ arranque rápido, y los scripts la empaquetan como `syncthing-manager-windows.zi
 dispositivos offline quedan en un único archivo (copias una a un dispositivo y la ejecutas).
 Ambos scripts limpian sus propios temporales al terminar, dejando solo `dist/` y las fuentes.
 
+**Embeber agentes para otras plataformas.** Una compilación local solo embebe la plantilla de
+agente de **su propio** SO y arquitectura de CPU, así que por sí sola puede generar agentes
+únicamente para esa plataforma. Para que tu build también genere agentes para los **otros**
+dispositivos de tu clúster (Windows, la otra arquitectura de Linux, macOS), consigue esos ficheros
+`syncthing-manager-agent-template-*` — descárgalos de los assets de una
+[Release de GitHub](https://github.com/gabildev/syncthing-manager/releases), o compílalos en esas
+máquinas — y colócalos en **`build/prebuilt/`** antes de ejecutar el script. Es el almacén
+persistente del que la build lee las plantillas cross‑OS (los scripts también guardan ahí las suyas
+recién compiladas); la build embebe lo que encuentre. No uses `dist/` para esto: las plantillas que
+la build deja en `dist/` se borran justo después de embeberse, así que `dist/` nunca las conserva.
+Los ficheros de plantilla no se pueden ejecutar por sí solos; existen solo para embeberse.
+
 <details>
 <summary><strong>CI y automatización de releases</strong></summary>
 
@@ -356,7 +368,7 @@ pytest
   localhost del dispositivo), o recurre a pasiva/agente.
 - **Falla el SSH**: confirma que `ssh user@ip` funciona a mano; pon la clave correcta en
   `~/.ssh/config` o en `devices.yml`; fija un puerto no estándar en `devices.yml`.
-- **Remotos Windows**: soportados vía **WinRM** (habilita WinRM en el destino) o vía un agente.
+- **Remotos Windows**: soportados vía **SSH** (OpenSSH), **WinRM** (habilítalo en el destino) o vía un agente.
 - **Un dispositivo queda pausado tras un error**: la herramienta lo reporta; reanúdalo desde la
   interfaz web de Syncthing, o con
   `curl -X POST -H "X-API-Key: <key>" "http://localhost:8384/rest/db/resume?folder=<id>"`.

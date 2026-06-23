@@ -259,6 +259,17 @@ to skip that archive step while testing). The offline‑device **agent templates
 single‑file (you copy one to a device and run it). Both scripts clean up their own
 temporary build files afterward, leaving only `dist/` and the sources.
 
+**Embedding agents for other platforms.** A local self‑build only embeds the agent template for
+**its own** OS and CPU architecture, so by itself it can generate agents for that platform only.
+To make your build also generate agents for the **other** devices in your cluster (Windows, the
+other Linux arch, macOS), get those `syncthing-manager-agent-template-*` files — download them
+from a [GitHub Release](https://github.com/gabildev/syncthing-manager/releases)'s assets, or build
+them on those machines — and put them in **`build/prebuilt/`** before running the build script.
+That's the persistent stash the build reads for cross‑OS templates (the scripts also keep their own
+freshly‑built templates there); the build embeds whatever it finds. Don't use `dist/` for this:
+the templates the build puts in `dist/` are deleted right after they're embedded, so `dist/` never
+keeps them. The template files can't run on their own; they exist only to be embedded.
+
 <details>
 <summary><strong>CI &amp; release automation</strong></summary>
 
@@ -346,7 +357,7 @@ pytest
   localhost), or rely on passive/agent.
 - **SSH fails**: confirm `ssh user@ip` works manually; set the right key in `~/.ssh/config`
   or `devices.yml`; set a non‑standard port in `devices.yml`.
-- **Windows remotes**: supported via **WinRM** (enable WinRM on the target) or via an agent.
+- **Windows remotes**: supported via **SSH** (OpenSSH), **WinRM** (enable it on the target), or via an agent.
 - **A device is left paused after an error**: the tool reports it; resume from the Syncthing
   web UI, or `curl -X POST -H "X-API-Key: <key>" "http://localhost:8384/rest/db/resume?folder=<id>"`.
 

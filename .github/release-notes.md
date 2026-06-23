@@ -46,7 +46,7 @@ build/build_windows.bat   # Windows
 build/build_macos.sh      # macOS
 ```
 
-A self-build only embeds the agent for **its own** architecture. If you want that build to also generate agents for the **other** devices in your cluster, download the `syncthing-manager-agent-template-*` files from the assets below and drop them into `dist/` before running the build script (the build embeds whatever templates are present). That's the only reason those template files are published — they can't be run on their own, only embedded in (or placed next to) the app.
+A self-build only embeds the agent for **its own** architecture. If you want that build to also generate agents for the **other** devices in your cluster, download the `syncthing-manager-agent-template-*` files from the assets below and drop them into `build/prebuilt/` before running the build script (the persistent stash the build reads for cross-OS templates; it embeds whatever is present there). That's the only reason those template files are published — they can't be run on their own, only embedded in (or placed next to) the app.
 
 ### Verify your download (optional)
 
@@ -117,7 +117,7 @@ build/build_windows.bat   # Windows
 build/build_macos.sh      # macOS
 ```
 
-Una compilación propia solo embebe el agente para **su propia** arquitectura. Si quieres que esa build también genere agentes para los **otros** dispositivos de tu clúster, descarga los ficheros `syncthing-manager-agent-template-*` de los assets de abajo y colócalos en `dist/` antes de ejecutar el script de compilación (la build embebe las plantillas que estén presentes). Esa es la única razón por la que se publican esos ficheros de plantilla — no se pueden ejecutar por sí solos, solo embeber en (o colocar junto a) la app.
+Una compilación propia solo embebe el agente para **su propia** arquitectura. Si quieres que esa build también genere agentes para los **otros** dispositivos de tu clúster, descarga los ficheros `syncthing-manager-agent-template-*` de los assets de abajo y colócalos en `build/prebuilt/` antes de ejecutar el script de compilación (el almacén persistente del que la build lee las plantillas cross-OS; embebe lo que esté presente ahí). Esa es la única razón por la que se publican esos ficheros de plantilla — no se pueden ejecutar por sí solos, solo embeber en (o colocar junto a) la app.
 
 ### Verifica tu descarga (opcional)
 
