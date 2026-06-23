@@ -1,3 +1,10 @@
+<p align="center"><img src="https://raw.githubusercontent.com/gabildev/syncthing-manager/main/assets/banner.png" alt="syncthing-manager" width="360"></p>
+
+<p align="center"><b>🌐 English</b> · <b>Español</b></p>
+
+<details open>
+<summary><h3>English</h3></summary>
+
 ### Downloads
 
 <div align="center">
@@ -63,3 +70,76 @@ shasum -a 256 -c SHA256SUMS.txt
 <br>
 
 The app is available in English and Spanish, automatically matching your system's language.
+
+</details>
+
+<details>
+<summary><h3>Español</h3></summary>
+
+### Descargas
+
+<div align="center">
+
+| Archivo | Plataforma |
+|---|---|
+| `syncthing-manager-windows.zip` | Windows (x86-64) |
+| `syncthing-manager-linux-amd64.tar.gz` | Linux (x86-64, incl. WSL) |
+| `syncthing-manager-linux-arm64.tar.gz` | Linux (ARM64 — Raspberry Pi de 64 bits, etc.) |
+| `syncthing-manager-macos-amd64.tar.gz` | macOS (Intel · x86-64) |
+| `syncthing-manager-macos-arm64.tar.gz` | macOS (Apple Silicon · M1/M2/M3…) |
+
+</div>
+
+<br>
+
+Es una build **one-dir** (arranque rápido — no se desempaqueta nada al iniciar): extrae el archivo y obtienes una carpeta `syncthing-manager/` — mantén sus ficheros juntos.
+
+### Inicio rápido
+
+El ejecutable dentro de esa carpeta es **a la vez la GUI y la CLI** (todas las plataformas incluyen ambas):
+
+**GUI** — haz doble clic en el ejecutable (`syncthing-manager.exe` en Windows) → se abre un asistente gráfico. Desde una terminal, ejecuta `syncthing-manager gui` para abrirlo.
+
+**CLI** — ejecútalo con un comando en una terminal en cualquier plataforma; añade `--help` para listar todos los comandos.
+
+### Agentes para dispositivos offline
+
+Cada build embebe los agentes para dispositivos offline de **todas las plataformas y arquitecturas soportadas**, así que la app puede generar un agente para cualquier dispositivo de tu clúster (`syncthing-manager generate-agent`, o desde la GUI). No necesitas descargar nada extra para eso.
+
+### Compilar para una plataforma no soportada
+
+¿No ves tu plataforma o arquitectura arriba? Compila la app tú mismo con el script de tu SO — produce el binario y el agente para esa máquina.
+
+Ejecuta:
+```bash
+build/build_linux.sh      # Linux
+build/build_windows.bat   # Windows
+build/build_macos.sh      # macOS
+```
+
+Una compilación propia solo embebe el agente para **su propia** arquitectura. Si quieres que esa build también genere agentes para los **otros** dispositivos de tu clúster, descarga los ficheros `syncthing-manager-agent-template-*` de los assets de abajo y colócalos en `dist/` antes de ejecutar el script de compilación (la build embebe las plantillas que estén presentes). Esa es la única razón por la que se publican esos ficheros de plantilla — no se pueden ejecutar por sí solos, solo embeber en (o colocar junto a) la app.
+
+### Verifica tu descarga (opcional)
+
+`SHA256SUMS.txt` lista el hash SHA-256 de cada fichero subido. Descárgalo en la misma carpeta que tu(s) archivo(s) y ejecuta la comprobación desde esa carpeta. Si no necesitas verificar todos los ficheros, añade `--ignore-missing` al comando:
+
+**Linux:**
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+**macOS:**
+```bash
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+**Windows** (PowerShell) — calcula el hash de tu fichero y compáralo con su línea en `SHA256SUMS.txt`:
+```powershell
+(Get-FileHash syncthing-manager-windows.zip -Algorithm SHA256).Hash
+```
+
+<br>
+
+La app está disponible en inglés y español, ajustándose automáticamente al idioma de tu sistema.
+
+</details>
