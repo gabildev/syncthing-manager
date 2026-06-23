@@ -1,0 +1,10 @@
+# Force users to pick one of the templates above (no blank issues).
+blank_issues_enabled: false
+
+contact_links:
+  - name: 💬 Questions & discussions / Preguntas y debates
+    url: https://github.com/gabildev/syncthing-manager/discussions
+    about: Ask questions or share ideas here. / Pregunta o comparte ideas aquí.
+  - name: 🔒 Report a security vulnerability / Reportar una vulnerabilidad
+    url: https://github.com/gabildev/syncthing-manager/security/advisories/new
+    about: Please report security issues privately, not as a public issue. / Reporta problemas de seguridad en privado, no como issue público.
